@@ -55,6 +55,7 @@ func (m ReqCounterMiddleware) RoundTrip(r *http.Request) (resp *http.Response, e
 
 		logrus.WithFields(logrus.Fields{
 			"host":  hostname,
+			"url":   r.RequestURI,
 			"path":  r.URL.Path,
 			"query": r.URL.RawQuery,
 			"body":  string(data),
