@@ -8,4 +8,5 @@ RUN go install ./...
 
 FROM golang:1.9-alpine
 COPY --from=0 /go/bin/rdslogs /rdslogs
+EXPOSE 3000
 ENTRYPOINT ["/rdslogs"]

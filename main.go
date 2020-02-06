@@ -63,9 +63,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	http.Handle("/metrics", promhttp.Handler())
+	prometheus.MustRegister(awsHTTPRequestsTotal)
+
 	go func() {
 		fmt.Println("exposing Prometheus metrics at 0.0.0.0:3000/metrics")
-		http.Handle("/metrics", promhttp.Handler())
 		log.Fatal(http.ListenAndServe(":3000", nil))
 	}()
 
