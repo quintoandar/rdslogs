@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -32,7 +33,7 @@ var awsHTTPRequestsTotal = prometheus.NewCounterVec(
 		Name: "aws_http_requests_total",
 		Help: "The total number of requests to the AWS API, broken by status code, method, host and action",
 	},
-	[]string{"code", "method", "host", "action"},
+	[]string{"code", "method", "host", "action", "database"},
 )
 
 // BuildID is set by Travis CI
@@ -47,29 +48,36 @@ type ReqCounterMiddleware struct {
 func (m ReqCounterMiddleware) RoundTrip(r *http.Request) (resp *http.Response, err error) {
 	hostname := r.URL.Hostname()
 
-	if logrus.IsLevelEnabled(logrus.DebugLevel) {
-		var data []byte
+	var data []byte
+	var body string
+	var values url.Values
 
-		if r.Body != nil {
-			data, _ = ioutil.ReadAll(r.Body)
-		}
-
-		// Restore the io.ReadCloser to its original state
-		r.Body = ioutil.NopCloser(bytes.NewBuffer(data))
-
-		logrus.WithFields(logrus.Fields{
-			"host":    hostname,
-			"req":     r.RequestURI,
-			"path":    r.URL.Path,
-			"query":   r.URL.RawQuery,
-			"body":    string(data),
-			"headers": r.Header,
-		}).Debugln("sending AWS API request")
+	if r.Body != nil {
+		data, _ = ioutil.ReadAll(r.Body)
 	}
 
-	// Gets the value of the QueryString "Action" (empty if not used)
-	// see https://docs.aws.amazon.com/AmazonRDS/latest/APIReference/API_Operations.html
-	action, _ := r.URL.Query()["action"]
+	body = string(data)
+
+	// For RDS API calls, the body is actually a query string, like:
+	// Action=DownloadDBLogFilePortion&DBInstanceIdentifier=insider-prod&LogFileName...
+	values, _ = url.ParseQuery(body)
+
+	// Restore the io.ReadCloser to its original state
+	r.Body = ioutil.NopCloser(bytes.NewBuffer(data))
+
+	// In case empty body, these values will just be empty, no worries
+	action, _ := values["Action"]
+	database, _ := values["DBInstanceIdentifier"]
+
+	logrus.WithFields(logrus.Fields{
+		"host":     hostname,
+		"path":     r.URL.Path,
+		"query":    r.URL.RawQuery,
+		"body":     body,
+		"values":   values,
+		"action":   action,
+		"database": database,
+	}).Debugln("sending AWS API request")
 
 	// Send the request, get the response
 	resp, err = m.Proxied.RoundTrip(r)
@@ -77,17 +85,26 @@ func (m ReqCounterMiddleware) RoundTrip(r *http.Request) (resp *http.Response, e
 	var statusCode string
 
 	if err != nil {
+		statusCode = "000"
+
 		logrus.WithFields(logrus.Fields{
 			"host":  hostname,
 			"path":  r.URL.Path,
 			"query": r.URL.RawQuery,
 		}).WithError(err).Errorln("error performing AWS API request")
-		statusCode = "000"
-	} else {
+	}
+
+	if resp != nil {
 		statusCode = strconv.Itoa(resp.StatusCode)
 	}
 
-	awsHTTPRequestsTotal.WithLabelValues(statusCode, r.Method, hostname, strings.Join(action, ",")).Inc()
+	awsHTTPRequestsTotal.WithLabelValues(
+		statusCode,
+		r.Method,
+		hostname,
+		strings.Join(action, ","),
+		strings.Join(database, ","),
+	).Inc()
 	return
 }
 
