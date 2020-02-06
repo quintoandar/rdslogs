@@ -3,9 +3,11 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -15,20 +17,57 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/rds"
 	flag "github.com/jessevdk/go-flags"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 
 	"github.com/honeycombio/libhoney-go"
 	"github.com/honeycombio/rdslogs/cli"
 )
 
+var awsHTTPRequestsTotal = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "aws_http_requests_total",
+		Help: "The total number of requests to the AWS API, broken by status code, method, host and action",
+	},
+	[]string{"code", "method", "host", "action"},
+)
+
 // BuildID is set by Travis CI
 var BuildID string
+
+// ReqCounterMiddleware counters the number of requests
+type ReqCounterMiddleware struct {
+	Proxied http.RoundTripper
+}
+
+// RoundTrip implements the RoundTripper interface.
+func (m ReqCounterMiddleware) RoundTrip(r *http.Request) (resp *http.Response, e error) {
+
+	// Send the request, get the response
+	resp, _ = m.Proxied.RoundTrip(r)
+
+	// Gets the value of the QueryString "Action" (empty if not used)
+	// see https://docs.aws.amazon.com/AmazonRDS/latest/APIReference/API_Operations.html
+	action, _ := r.URL.Query()["Action"]
+
+	awsHTTPRequestsTotal.
+		WithLabelValues(strconv.Itoa(resp.StatusCode), r.Method, r.URL.Host, strings.Join(action, ",")).Inc()
+
+	return
+}
 
 func main() {
 	options, err := parseFlags()
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	go func() {
+		fmt.Println("exposing Prometheus metrics at 0.0.0.0:3000/metrics")
+		http.Handle("/metrics", promhttp.Handler())
+		log.Fatal(http.ListenAndServe(":3000", nil))
+	}()
 
 	sigs := make(chan os.Signal, 1)
 	abort := make(chan bool, 0)
@@ -46,12 +85,17 @@ func main() {
 		}
 	}()
 
+	sess := session.Must(session.NewSession(&aws.Config{
+		Region: aws.String(options.Region),
+		HTTPClient: &http.Client{
+			Transport: ReqCounterMiddleware{http.DefaultTransport},
+		},
+	}))
+
 	c := &cli.CLI{
 		Options: options,
-		RDS: rds.New(session.New(), &aws.Config{
-			Region: aws.String(options.Region),
-		}),
-		Abort: abort,
+		RDS:     rds.New(sess),
+		Abort:   abort,
 	}
 
 	if options.Debug {
@@ -121,7 +165,7 @@ func parseFlags() (*cli.Options, error) {
 			fmt.Fprintln(os.Stderr, "Failed to parse the command line. Run with --help for more info")
 			return nil, err
 		}
-		return nil, fmt.Errorf("Unexpected extra arguments: %s\n", strings.Join(extraArgs, " "))
+		return nil, fmt.Errorf("unexpected extra arguments: %s", strings.Join(extraArgs, " "))
 	}
 
 	// if all we want is the config file, just write it in and exit

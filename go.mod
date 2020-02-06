@@ -14,8 +14,10 @@ require (
 	github.com/honeycombio/sqlparser v0.0.0-20180730202938-aab361df519b // indirect
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/klauspost/compress v1.8.4 // indirect
+	github.com/prometheus/client_golang v1.4.0
 	github.com/sirupsen/logrus v1.4.2
 	github.com/vmihailenco/msgpack v4.0.4+incompatible // indirect
+	golang.org/x/net v0.0.0-20190613194153-d28f0bde5980
 	google.golang.org/appengine v1.6.2 // indirect
 	gopkg.in/alexcesaro/statsd.v2 v2.0.0 // indirect
 )
