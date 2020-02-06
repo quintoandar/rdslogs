@@ -42,17 +42,30 @@ type ReqCounterMiddleware struct {
 }
 
 // RoundTrip implements the RoundTripper interface.
-func (m ReqCounterMiddleware) RoundTrip(r *http.Request) (resp *http.Response, e error) {
+func (m ReqCounterMiddleware) RoundTrip(r *http.Request) (resp *http.Response, err error) {
+	hostname := r.URL.Hostname()
+
+	fields := logrus.Fields{
+		"host":  hostname,
+		"path":  r.URL.Path,
+		"query": r.URL.RawQuery,
+	}
+
+	logrus.WithFields(fields).Debugln("sending AWS API request")
 
 	// Send the request, get the response
-	resp, _ = m.Proxied.RoundTrip(r)
+	resp, err = m.Proxied.RoundTrip(r)
+
+	if err != nil {
+		logrus.WithFields(fields).WithError(err).Errorln("error performing AWS API request")
+	}
 
 	// Gets the value of the QueryString "Action" (empty if not used)
 	// see https://docs.aws.amazon.com/AmazonRDS/latest/APIReference/API_Operations.html
-	action, _ := r.URL.Query()["Action"]
+	action, _ := r.URL.Query()["action"]
 
 	awsHTTPRequestsTotal.
-		WithLabelValues(strconv.Itoa(resp.StatusCode), r.Method, r.URL.Host, strings.Join(action, ",")).Inc()
+		WithLabelValues(strconv.Itoa(resp.StatusCode), r.Method, hostname, strings.Join(action, ",")).Inc()
 
 	return
 }
