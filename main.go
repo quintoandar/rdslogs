@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -45,19 +46,30 @@ type ReqCounterMiddleware struct {
 func (m ReqCounterMiddleware) RoundTrip(r *http.Request) (resp *http.Response, err error) {
 	hostname := r.URL.Hostname()
 
-	fields := logrus.Fields{
-		"host":  hostname,
-		"path":  r.URL.Path,
-		"query": r.URL.RawQuery,
-	}
+	if logrus.IsLevelEnabled(logrus.DebugLevel) {
+		var data []byte
 
-	logrus.WithFields(fields).Debugln("sending AWS API request")
+		if body, err := r.GetBody(); err != nil {
+			data, _ = ioutil.ReadAll(body)
+		}
+
+		logrus.WithFields(logrus.Fields{
+			"host":  hostname,
+			"path":  r.URL.Path,
+			"query": r.URL.RawQuery,
+			"body":  string(data),
+		}).Debugln("sending AWS API request")
+	}
 
 	// Send the request, get the response
 	resp, err = m.Proxied.RoundTrip(r)
 
 	if err != nil {
-		logrus.WithFields(fields).WithError(err).Errorln("error performing AWS API request")
+		logrus.WithFields(logrus.Fields{
+			"host":  hostname,
+			"path":  r.URL.Path,
+			"query": r.URL.RawQuery,
+		}).WithError(err).Errorln("error performing AWS API request")
 	}
 
 	// Gets the value of the QueryString "Action" (empty if not used)
