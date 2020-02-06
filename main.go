@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -49,21 +50,31 @@ func (m ReqCounterMiddleware) RoundTrip(r *http.Request) (resp *http.Response, e
 	if logrus.IsLevelEnabled(logrus.DebugLevel) {
 		var data []byte
 
-		if body, err := r.GetBody(); err != nil {
-			data, _ = ioutil.ReadAll(body)
+		if r.Body != nil {
+			data, _ = ioutil.ReadAll(r.Body)
 		}
 
+		// Restore the io.ReadCloser to its original state
+		r.Body = ioutil.NopCloser(bytes.NewBuffer(data))
+
 		logrus.WithFields(logrus.Fields{
-			"host":  hostname,
-			"url":   r.RequestURI,
-			"path":  r.URL.Path,
-			"query": r.URL.RawQuery,
-			"body":  string(data),
+			"host":    hostname,
+			"req":     r.RequestURI,
+			"path":    r.URL.Path,
+			"query":   r.URL.RawQuery,
+			"body":    string(data),
+			"headers": r.Header,
 		}).Debugln("sending AWS API request")
 	}
 
+	// Gets the value of the QueryString "Action" (empty if not used)
+	// see https://docs.aws.amazon.com/AmazonRDS/latest/APIReference/API_Operations.html
+	action, _ := r.URL.Query()["action"]
+
 	// Send the request, get the response
 	resp, err = m.Proxied.RoundTrip(r)
+
+	var statusCode string
 
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
@@ -71,15 +82,12 @@ func (m ReqCounterMiddleware) RoundTrip(r *http.Request) (resp *http.Response, e
 			"path":  r.URL.Path,
 			"query": r.URL.RawQuery,
 		}).WithError(err).Errorln("error performing AWS API request")
+		statusCode = "000"
+	} else {
+		statusCode = strconv.Itoa(resp.StatusCode)
 	}
 
-	// Gets the value of the QueryString "Action" (empty if not used)
-	// see https://docs.aws.amazon.com/AmazonRDS/latest/APIReference/API_Operations.html
-	action, _ := r.URL.Query()["action"]
-
-	awsHTTPRequestsTotal.
-		WithLabelValues(strconv.Itoa(resp.StatusCode), r.Method, hostname, strings.Join(action, ",")).Inc()
-
+	awsHTTPRequestsTotal.WithLabelValues(statusCode, r.Method, hostname, strings.Join(action, ",")).Inc()
 	return
 }
 
