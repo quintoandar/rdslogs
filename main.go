@@ -65,9 +65,17 @@ func (m ReqCounterMiddleware) RoundTrip(r *http.Request) (resp *http.Response, e
 	// Restore the io.ReadCloser to its original state
 	r.Body = ioutil.NopCloser(bytes.NewBuffer(data))
 
-	// In case empty body, these values will just be empty, no worries
-	action, _ := values["Action"]
-	database, _ := values["DBInstanceIdentifier"]
+	database, ok := values["DBInstanceIdentifier"]
+
+	if !ok {
+		database = []string{"nil"}
+	}
+
+	action, ok := values["Action"]
+
+	if !ok {
+		action = []string{"nil"}
+	}
 
 	logrus.WithFields(logrus.Fields{
 		"host":     hostname,
