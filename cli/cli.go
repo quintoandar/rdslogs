@@ -624,7 +624,7 @@ func (c *CLI) waitForPollingInterval() {
 	interval := time.Second * time.Duration(c.Options.PollInterval)
 
 	// this will be a random number between [0, PollInterval)
-	rNumber := time.Duration(rand.Int63n(c.Options.PollInterval))
+	rNumber := time.Second * time.Duration(rand.Int63n(c.Options.PollInterval))
 
 	// the jitter is half that number, but can be added or subtracted
 	jitter := rNumber / 2
