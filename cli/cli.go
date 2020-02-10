@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"path"
 	"sort"
@@ -43,7 +44,9 @@ type Options struct {
 	Download           bool              `short:"d" long:"download" description:"Download old logs instead of tailing the current log"`
 	DownloadDir        string            `long:"download_dir" description:"directory in to which log files are downloaded" default:"./"`
 	NumLines           int64             `long:"num_lines" description:"number of lines to request at a time from AWS. Larger number will be more efficient, smaller number will allow for longer lines" default:"10000"`
-	BackoffTimer       int64             `long:"backoff_timer" description:"how many seconds to pause when rate limited by AWS." default:"5"`
+	BackoffTimer       int64             `long:"backoff_timer" description:"minimum number of seconds to pause when rate limited by AWS (will do exponential backoff)." default:"1"`
+	BackoffMaxRetries  int               `long:"backoff_retries" description:"maximum number of retries set on the AWS client (will do exponential backoff)" default:"4"`
+	PollInterval       int64             `long:"poll_interval" description:"number of seconds to wait between requests for logs (will add or subtract a random jitter with absolute value of up to quarter of that of the interval)" default:"15"`
 	Output             string            `short:"o" long:"output" description:"output for the logs: stdout or honeycomb" default:"stdout"`
 	WriteKey           string            `long:"writekey" description:"Team write key, when output is honeycomb"`
 	Dataset            string            `long:"dataset" description:"Name of the dataset, when output is honeycomb"`
@@ -94,6 +97,10 @@ type CLI struct {
 	output publisher.Publisher
 	// allow changing the time for tests
 	fakeNower Nower
+}
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
 }
 
 // Stream polls the RDS log endpoint forever to effectively tail the logs and
@@ -165,10 +172,12 @@ func (c *CLI) Stream() error {
 		// get recent log entries
 		resp, err := c.getRecentEntries(sPos)
 		if err != nil {
+			// if we got here, it means that even with the exponential backoff + jitter retries
+			// configured in the aws client, we still got rate limited
+			//
+			// in this case, better to fail the client than to keep trying
 			if strings.HasPrefix(err.Error(), "Throttling: Rate exceeded") {
-				logrus.Infof("AWS Rate limit hit; sleeping for %d seconds.\n", c.Options.BackoffTimer)
-				c.waitFor(time.Duration(c.Options.BackoffTimer) * time.Second)
-				continue
+				logrus.Fatal("AWS Rate limit hit (%s)", err.Error())
 			}
 			if strings.HasPrefix(err.Error(), "InvalidParameterValue: This file contains binary data") {
 				logrus.Infof("binary data at marker %s, skipping 1000 in marker position\n", sPos.marker)
@@ -183,7 +192,7 @@ func (c *CLI) Stream() error {
 			if strings.HasPrefix(err.Error(), "DBLogFileNotFoundFault") {
 				logrus.WithError(err).
 					Warn("log does not appear to exist (rotation ongoing?) - waiting and retrying")
-				c.waitFor(time.Second * 5)
+				c.waitForPollingInterval()
 				continue
 			}
 			return err
@@ -200,7 +209,7 @@ func (c *CLI) Stream() error {
 			// If we reset our marker, asked for logs, and got an empty marker back,
 			// we don't have anything to do but wait
 			if sPos.marker == "0" && (resp.Marker != nil && *resp.Marker == "") {
-				c.waitFor(time.Second * 5)
+				c.waitForPollingInterval()
 				continue
 			}
 
@@ -227,7 +236,7 @@ func (c *CLI) Stream() error {
 						"expectedFile": sPos.logFile.LogFileName,
 						"newestFile":   newestFile.LogFileName,
 					}).Info("newest file is a rotated file, we appear to be mid-rotation")
-					c.waitFor(time.Second * 5)
+					c.waitForPollingInterval()
 					continue
 				}
 
@@ -277,7 +286,7 @@ func (c *CLI) Stream() error {
 				}
 			}
 			// Wait for a few seconds and try again.
-			c.waitFor(5 * time.Second)
+			c.waitForPollingInterval()
 		}
 		newMarker := c.getNextMarker(sPos, resp)
 		logrus.WithFields(logrus.Fields{
@@ -609,7 +618,30 @@ func (c *CLI) getListRDSInstances() ([]string, error) {
 	return instances, nil
 }
 
+// waitForPollingInterval waits for the ammount selected as the polling interval, plus
+// a small random ammount (the jitter)
+func (c *CLI) waitForPollingInterval() {
+	interval := time.Second * time.Duration(c.Options.PollInterval)
+	jitter := c.jitter(c.Options.PollInterval) / 4
+	wait := interval + jitter
+
+	logrus.WithFields(logrus.Fields{
+		"instance": c.Options.InstanceIdentifier,
+		"interval": interval,
+		"jitter":   jitter,
+		"wait":     wait,
+	}).Info("waiting for poll interval")
+
+	c.waitFor(wait)
+}
+
+// jitter returns a jittered delay for the given duration
+func (c *CLI) jitter(delay int64) time.Duration {
+	return time.Duration(rand.Int63n(delay) - delay)
+}
+
 func (c *CLI) waitFor(d time.Duration) {
+
 	select {
 	case <-c.Abort:
 		return

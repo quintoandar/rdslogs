@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/rds"
@@ -48,9 +49,11 @@ type ReqCounterMiddleware struct {
 func (m ReqCounterMiddleware) RoundTrip(r *http.Request) (resp *http.Response, err error) {
 	hostname := r.URL.Hostname()
 
-	var data []byte
-	var body string
-	var values url.Values
+	var (
+		data   []byte
+		body   string
+		values url.Values
+	)
 
 	if r.Body != nil {
 		data, _ = ioutil.ReadAll(r.Body)
@@ -65,13 +68,12 @@ func (m ReqCounterMiddleware) RoundTrip(r *http.Request) (resp *http.Response, e
 	// Restore the io.ReadCloser to its original state
 	r.Body = ioutil.NopCloser(bytes.NewBuffer(data))
 
+	action, ok := values["Action"]
 	database, ok := values["DBInstanceIdentifier"]
 
 	if !ok {
 		database = []string{"nil"}
 	}
-
-	action, ok := values["Action"]
 
 	if !ok {
 		action = []string{"nil"}
@@ -113,6 +115,7 @@ func (m ReqCounterMiddleware) RoundTrip(r *http.Request) (resp *http.Response, e
 		strings.Join(action, ","),
 		strings.Join(database, ","),
 	).Inc()
+
 	return
 }
 
@@ -121,6 +124,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// For logging filename and line number!
+	logrus.SetReportCaller(true)
 
 	http.Handle("/metrics", promhttp.Handler())
 	prometheus.MustRegister(awsHTTPRequestsTotal)
@@ -148,6 +154,15 @@ func main() {
 
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region: aws.String(options.Region),
+		// default retry is set to 0
+		// add custom retry parameters to avoid throttling erros
+		Retryer: client.DefaultRetryer{
+			NumMaxRetries:    options.BackoffMaxRetries,
+			MinRetryDelay:    50 * time.Millisecond,
+			MaxRetryDelay:    3000 * time.Millisecond,
+			MinThrottleDelay: time.Duration(options.BackoffTimer),
+			MaxThrottleDelay: 5 * time.Duration(options.BackoffTimer) * time.Second,
+		},
 		HTTPClient: &http.Client{
 			Transport: ReqCounterMiddleware{http.DefaultTransport},
 		},
