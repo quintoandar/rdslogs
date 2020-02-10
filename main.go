@@ -125,9 +125,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// For logging filename and line number!
-	logrus.SetReportCaller(true)
-
 	http.Handle("/metrics", promhttp.Handler())
 	prometheus.MustRegister(awsHTTPRequestsTotal)
 

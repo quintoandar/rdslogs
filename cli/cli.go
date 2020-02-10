@@ -622,8 +622,21 @@ func (c *CLI) getListRDSInstances() ([]string, error) {
 // a small random ammount (the jitter)
 func (c *CLI) waitForPollingInterval() {
 	interval := time.Second * time.Duration(c.Options.PollInterval)
-	jitter := c.jitter(c.Options.PollInterval) / 4
-	wait := interval + jitter
+
+	// this will be a random number between [0, PollInterval)
+	rNumber := time.Duration(rand.Int63n(c.Options.PollInterval))
+
+	// the jitter is half that number, but can be added or subtracted
+	jitter := rNumber / 2
+
+	var wait time.Duration
+
+	// decide if we add or subtract the jitter (50% chance for either)
+	if rNumber > interval/2 {
+		wait = interval + jitter
+	} else {
+		wait = interval - jitter
+	}
 
 	logrus.WithFields(logrus.Fields{
 		"instance": c.Options.InstanceIdentifier,
@@ -635,13 +648,7 @@ func (c *CLI) waitForPollingInterval() {
 	c.waitFor(wait)
 }
 
-// jitter returns a jittered delay for the given duration
-func (c *CLI) jitter(delay int64) time.Duration {
-	return time.Duration(rand.Int63n(delay) - delay)
-}
-
 func (c *CLI) waitFor(d time.Duration) {
-
 	select {
 	case <-c.Abort:
 		return
