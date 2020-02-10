@@ -37,6 +37,14 @@ var awsHTTPRequestsTotal = prometheus.NewCounterVec(
 	[]string{"code", "method", "host", "action", "database"},
 )
 
+var rdslogsFatalErrors = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "rdslogs_fatal_errors",
+		Help: "Count the number of fatal terminationsAPI, broken by error message",
+	},
+	[]string{"err"},
+)
+
 // BuildID is set by Travis CI
 var BuildID string
 
@@ -127,6 +135,7 @@ func main() {
 
 	http.Handle("/metrics", promhttp.Handler())
 	prometheus.MustRegister(awsHTTPRequestsTotal)
+	prometheus.MustRegister(rdslogsFatalErrors)
 
 	go func() {
 		fmt.Println("exposing Prometheus metrics at 0.0.0.0:3000/metrics")
@@ -198,7 +207,7 @@ func main() {
 		log.Fatal(awsCredsFailureMsg())
 	}
 	if err != nil {
-		log.Fatal(err)
+		handleErr(err)
 	}
 
 	if options.Download {
@@ -209,9 +218,16 @@ func main() {
 		err = c.Stream()
 	}
 	if err != nil {
-		log.Fatal(err)
+		handleErr(err)
 	}
 	fmt.Fprintln(os.Stderr, "OK")
+}
+
+func handleErr(err error) {
+	rdslogsFatalErrors.WithLabelValues(
+		err.Error(),
+	).Inc()
+	log.Fatal(err)
 }
 
 // getVersion returns the internal version ID

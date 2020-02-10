@@ -177,7 +177,7 @@ func (c *CLI) Stream() error {
 			//
 			// in this case, better to fail the client than to keep trying
 			if strings.HasPrefix(err.Error(), "Throttling: Rate exceeded") {
-				logrus.Fatal("AWS Rate limit hit (%s)", err.Error())
+				return fmt.Errorf("AWS Rate limit hit (%s)", err.Error())
 			}
 			if strings.HasPrefix(err.Error(), "InvalidParameterValue: This file contains binary data") {
 				logrus.Infof("binary data at marker %s, skipping 1000 in marker position\n", sPos.marker)
