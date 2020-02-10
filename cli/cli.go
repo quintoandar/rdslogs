@@ -48,7 +48,7 @@ type Options struct {
 	WriteKey           string            `long:"writekey" description:"Team write key, when output is honeycomb"`
 	Dataset            string            `long:"dataset" description:"Name of the dataset, when output is honeycomb"`
 	APIHost            string            `long:"api_host" description:"Hostname for the Honeycomb API server" default:"https://api.honeycomb.io/"`
-	ScrubQuery         bool              `long:"scrub_query" description:"Replaces the query field with a one-way hash of the contents"`
+	ScrubQuery         string            `long:"scrub_query" description:"Replaces the query field with a one-way hash of the contents (true|false)"`
 	SampleRate         int               `long:"sample_rate" description:"Only send 1 / N log lines" default:"1"`
 	AddFields          map[string]string `short:"a" long:"add_field" description:"Extra fields to send in request, in the style of \"field:value\""`
 	NumParsers         int               `long:"num_parsers" default:"4" description:"Number of parsers to spin up. Currently only supported for the mysql parser."`
@@ -129,11 +129,14 @@ func (c *CLI) Stream() error {
 				c.Options.DBType, c.Options.LogType)
 		}
 
+		var scrub bool
+		scrub, _ = strconv.ParseBool(c.Options.ScrubQuery)
+
 		pub := &publisher.HoneycombPublisher{
 			Writekey:   c.Options.WriteKey,
 			Dataset:    c.Options.Dataset,
 			APIHost:    c.Options.APIHost,
-			ScrubQuery: c.Options.ScrubQuery,
+			ScrubQuery: scrub,
 			SampleRate: c.Options.SampleRate,
 			AddFields:  c.Options.AddFields,
 			Parser:     parser,
