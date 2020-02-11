@@ -22,6 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/rds"
 	flag "github.com/jessevdk/go-flags"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 
@@ -29,7 +30,7 @@ import (
 	"github.com/honeycombio/rdslogs/cli"
 )
 
-var awsHTTPRequestsTotal = prometheus.NewCounterVec(
+var awsHTTPRequestsTotal = promauto.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "aws_http_requests_total",
 		Help: "The total number of requests to the AWS API, broken by status code, method, host and action",
@@ -37,7 +38,7 @@ var awsHTTPRequestsTotal = prometheus.NewCounterVec(
 	[]string{"code", "method", "host", "action", "database"},
 )
 
-var rdslogsFatalErrors = prometheus.NewCounterVec(
+var rdslogsFatalErrors = promauto.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "rdslogs_fatal_errors",
 		Help: "Count the number of fatal terminationsAPI, broken by error message",
@@ -134,8 +135,6 @@ func main() {
 	}
 
 	http.Handle("/metrics", promhttp.Handler())
-	prometheus.MustRegister(awsHTTPRequestsTotal)
-	prometheus.MustRegister(rdslogsFatalErrors)
 
 	go func() {
 		fmt.Println("exposing Prometheus metrics at 0.0.0.0:3000/metrics")
