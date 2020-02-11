@@ -30,22 +30,12 @@ import (
 	"github.com/honeycombio/rdslogs/cli"
 )
 
-var (
-	awsHTTPRequestsTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "aws_http_requests_total",
-			Help: "The total number of requests to the AWS API, broken by status code, method, host and action",
-		},
-		[]string{"code", "method", "host", "action", "database"},
-	)
-
-	rdslogsFatalErrorsTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "rdslogs_fatal_errors_total",
-			Help: "Count the number of fatal terminationsAPI, broken by error message",
-		},
-		[]string{"error"},
-	)
+var awsHTTPRequestsTotal = promauto.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "aws_http_requests_total",
+		Help: "The total number of requests to the AWS API, broken by status code, method, host and action",
+	},
+	[]string{"code", "method", "host", "action", "database"},
 )
 
 // BuildID is set by Travis CI
@@ -208,7 +198,7 @@ func main() {
 		log.Fatal(awsCredsFailureMsg())
 	}
 	if err != nil {
-		handleErr(err)
+		log.Fatal(err)
 	}
 
 	if options.Download {
@@ -219,16 +209,9 @@ func main() {
 		err = c.Stream()
 	}
 	if err != nil {
-		handleErr(err)
+		log.Fatal(err)
 	}
 	fmt.Fprintln(os.Stderr, "OK")
-}
-
-func handleErr(err error) {
-	rdslogsFatalErrorsTotal.WithLabelValues(
-		err.Error(),
-	).Inc()
-	log.Fatal(err)
 }
 
 // getVersion returns the internal version ID
