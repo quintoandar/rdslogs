@@ -158,7 +158,7 @@ func main() {
 			MinRetryDelay:    50 * time.Millisecond,
 			MaxRetryDelay:    3000 * time.Millisecond,
 			MinThrottleDelay: time.Duration(options.BackoffTimer),
-			MaxThrottleDelay: 5 * time.Duration(options.BackoffTimer) * time.Second,
+			MaxThrottleDelay: 10 * time.Duration(options.BackoffTimer) * time.Second,
 		},
 		HTTPClient: &http.Client{
 			Transport: ReqCounterMiddleware{http.DefaultTransport},

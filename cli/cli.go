@@ -44,7 +44,7 @@ type Options struct {
 	Download           bool              `short:"d" long:"download" description:"Download old logs instead of tailing the current log"`
 	DownloadDir        string            `long:"download_dir" description:"directory in to which log files are downloaded" default:"./"`
 	NumLines           int64             `long:"num_lines" description:"number of lines to request at a time from AWS. Larger number will be more efficient, smaller number will allow for longer lines" default:"10000"`
-	BackoffTimer       int64             `long:"backoff_timer" description:"minimum number of seconds to pause when rate limited by AWS (will do exponential backoff)." default:"1"`
+	BackoffTimer       int64             `long:"backoff_timer" description:"minimum number of seconds to pause when rate limited by AWS (will do exponential backoff)." default:"3"`
 	BackoffMaxRetries  int               `long:"backoff_retries" description:"maximum number of retries set on the AWS client (will do exponential backoff)" default:"4"`
 	PollInterval       int64             `long:"poll_interval" description:"number of seconds to wait between requests for logs (will add or subtract a random jitter with absolute value of up to quarter of that of the interval)" default:"15"`
 	Output             string            `short:"o" long:"output" description:"output for the logs: stdout or honeycomb" default:"stdout"`
