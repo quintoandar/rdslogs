@@ -30,20 +30,22 @@ import (
 	"github.com/honeycombio/rdslogs/cli"
 )
 
-var awsHTTPRequestsTotal = promauto.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "aws_http_requests_total",
-		Help: "The total number of requests to the AWS API, broken by status code, method, host and action",
-	},
-	[]string{"code", "method", "host", "action", "database"},
-)
+var (
+	awsHTTPRequestsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "aws_http_requests_total",
+			Help: "The total number of requests to the AWS API, broken by status code, method, host and action",
+		},
+		[]string{"code", "method", "host", "action", "database"},
+	)
 
-var rdslogsFatalErrors = promauto.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "rdslogs_fatal_errors",
-		Help: "Count the number of fatal terminationsAPI, broken by error message",
-	},
-	[]string{"error"},
+	rdslogsFatalErrorsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "rdslogs_fatal_errors_total",
+			Help: "Count the number of fatal terminationsAPI, broken by error message",
+		},
+		[]string{"error"},
+	)
 )
 
 // BuildID is set by Travis CI
@@ -223,7 +225,7 @@ func main() {
 }
 
 func handleErr(err error) {
-	rdslogsFatalErrors.WithLabelValues(
+	rdslogsFatalErrorsTotal.WithLabelValues(
 		err.Error(),
 	).Inc()
 	log.Fatal(err)
