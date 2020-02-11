@@ -120,6 +120,13 @@ func (m ReqCounterMiddleware) RoundTrip(r *http.Request) (resp *http.Response, e
 	return
 }
 
+func min(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func main() {
 	options, err := parseFlags()
 	if err != nil {
@@ -143,7 +150,7 @@ func main() {
 		select {
 		case abort <- true:
 			close(abort)
-		case <-time.After(10 * time.Second):
+		case <-time.After(time.Duration(min(20, options.PollInterval)) * time.Second):
 			fmt.Fprintf(os.Stderr, "Taking too long... Aborting.\n")
 			os.Exit(1)
 		}
