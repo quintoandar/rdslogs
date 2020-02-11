@@ -46,7 +46,7 @@ type Options struct {
 	NumLines           int64             `long:"num_lines" description:"number of lines to request at a time from AWS. Larger number will be more efficient, smaller number will allow for longer lines" default:"10000"`
 	BackoffTimer       int64             `long:"backoff_timer" description:"minimum number of seconds to pause when rate limited by AWS (will do exponential backoff)." default:"3"`
 	BackoffMaxRetries  int               `long:"backoff_retries" description:"maximum number of retries set on the AWS client (will do exponential backoff)" default:"4"`
-	PollInterval       int64             `long:"poll_interval" description:"number of seconds to wait between requests for logs (will add or subtract a random jitter with absolute value of up to quarter of that of the interval)" default:"15"`
+	PollInterval       int64             `long:"poll_interval" description:"number of seconds to wait between requests for logs (will add or subtract a random jitter with absolute value of up to quarter of that of the interval)" default:"10"`
 	Output             string            `short:"o" long:"output" description:"output for the logs: stdout or honeycomb" default:"stdout"`
 	WriteKey           string            `long:"writekey" description:"Team write key, when output is honeycomb"`
 	Dataset            string            `long:"dataset" description:"Name of the dataset, when output is honeycomb"`
@@ -177,7 +177,7 @@ func (c *CLI) Stream() error {
 			//
 			// in this case, better to fail the client than to keep trying
 			if strings.HasPrefix(err.Error(), "Throttling: Rate exceeded") {
-				return fmt.Errorf("AWS Rate limit hit (%s)", err.Error())
+				return fmt.Errorf("AWS Rate limit hit: %s", err.Error())
 			}
 			if strings.HasPrefix(err.Error(), "InvalidParameterValue: This file contains binary data") {
 				logrus.Infof("binary data at marker %s, skipping 1000 in marker position\n", sPos.marker)
