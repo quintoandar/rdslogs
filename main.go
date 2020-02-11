@@ -42,7 +42,7 @@ var rdslogsFatalErrors = prometheus.NewCounterVec(
 		Name: "rdslogs_fatal_errors",
 		Help: "Count the number of fatal terminationsAPI, broken by error message",
 	},
-	[]string{"err"},
+	[]string{"error"},
 )
 
 // BuildID is set by Travis CI
